@@ -206,11 +206,6 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
 
   Future<void> _playDoorWind() async {
     try {
-      await _doorWindPlayer.setAudioContext(
-        const AudioContext(
-          android: AudioContextAndroid(audioFocus: AndroidAudioFocus.none),
-        ),
-      );
       await _doorWindPlayer.setVolume(1.0);
       await _doorWindPlayer.play(AssetSource('audio/wind_gust.mp3'));
       _doorWindStarted = true;
