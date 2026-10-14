@@ -53,6 +53,7 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
     super.initState();
     _doorVideoController = VideoPlayerController.asset(
       'assets/videos/door_1080x1920.mp4',
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
     );
     _doorBurnController = AnimationController(
       vsync: this,
@@ -185,19 +186,33 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
     unawaited(HapticFeedback.heavyImpact());
     _doorBurnController.forward(from: 0);
     setState(() => _doorOpening = true);
-    unawaited(_playDoorWind());
+    var doorVideoPlayed = false;
     try {
       await _doorVideoInitialization;
       if (!mounted) return;
-      if (_doorVideoController.value.isInitialized) {
-        await _playDoorVideo();
+      if (!_doorVideoController.value.isInitialized) {
+        throw StateError(
+          _doorVideoController.value.errorDescription ??
+              'Door video did not initialize',
+        );
+      }
+      doorVideoPlayed = await _playDoorVideo();
+      if (!doorVideoPlayed) throw StateError('Door video playback failed');
+    } catch (error) {
+      debugPrint('Door entry video failed: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تعذر تشغيل فيديو الدخول. أعد المحاولة أو تحقق من ملف الفيديو.'),
+          ),
+        );
       }
     } finally {
       if (mounted) {
         if (_doorWindStarted) await _stopDoorWind();
         setState(() {
-          _doorOpened = true;
-          currentStage = 1;
+          _doorOpened = doorVideoPlayed;
+          if (doorVideoPlayed) currentStage = 1;
           _doorOpening = false;
         });
       }
@@ -206,6 +221,11 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
 
   Future<void> _playDoorWind() async {
     try {
+      await _doorWindPlayer.setAudioContext(
+        const AudioContext(
+          android: AudioContextAndroid(audioFocus: AndroidAudioFocus.none),
+        ),
+      );
       await _doorWindPlayer.setVolume(1.0);
       await _doorWindPlayer.play(AssetSource('audio/wind_gust.mp3'));
       _doorWindStarted = true;
@@ -236,12 +256,12 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
     }
   }
 
-  Future<void> _playDoorVideo() async {
+  Future<bool> _playDoorVideo() async {
     if (!_doorVideoController.value.isInitialized) {
       await _doorVideoInitialization;
     }
     if (!mounted || !_doorVideoController.value.isInitialized) {
-      return;
+      return false;
     }
 
     setState(() {});
@@ -261,10 +281,13 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         _doorVideoController.seekTo(Duration.zero),
       ]);
       await _doorVideoController.play();
+      unawaited(_playDoorWind());
       completePlayback();
       await playbackCompleted.future;
+      return !_doorVideoController.value.hasError;
     } catch (error) {
       debugPrint('Door video playback failed: $error');
+      return false;
     } finally {
       _doorVideoController.removeListener(completePlayback);
     }
