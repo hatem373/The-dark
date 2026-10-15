@@ -360,7 +360,7 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         final response = await http.post(
           Uri.https(
             'generativelanguage.googleapis.com',
-            '/v1beta/models/gemini-2.5-flash:generateContent',
+            '/v1beta/models/gemini-3.8-flash:generateContent',
           ),
           headers: {
             'Content-Type': 'application/json',
@@ -427,7 +427,7 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         }
       } else {
         final model = FirebaseAI.googleAI(auth: auth).generativeModel(
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           systemInstruction: Content.system(systemInstruction),
           generationConfig: GenerationConfig(
             temperature: 0.9,
