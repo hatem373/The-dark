@@ -387,7 +387,24 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
           }),
         );
         if (response.statusCode != 200) {
-          throw StateError('Gemini API request failed (${response.statusCode})');
+          var errorDetails = 'HTTP ${response.statusCode}';
+          try {
+            final errorPayload = jsonDecode(response.body);
+            if (errorPayload is Map<String, dynamic> &&
+                errorPayload['error'] is Map<String, dynamic>) {
+              final apiError = errorPayload['error'] as Map<String, dynamic>;
+              final status = apiError['status'];
+              final message = apiError['message'];
+              if (message is String && message.isNotEmpty) {
+                errorDetails = status is String && status.isNotEmpty
+                    ? '$status: $message'
+                    : message;
+              }
+            }
+          } on FormatException {
+            errorDetails = 'HTTP ${response.statusCode}: ${response.body}';
+          }
+          throw StateError('Gemini API error: $errorDetails');
         }
 
         final payload = jsonDecode(response.body);
@@ -437,8 +454,12 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
     } catch (error) {
       debugPrint('Shadow Gemini request failed: $error');
       if (!mounted) return;
+      final errorDetails = error.toString().replaceFirst('Bad state: ', '');
+      final visibleError = errorDetails.length > 300
+          ? '${errorDetails.substring(0, 300)}...'
+          : errorDetails;
       setState(() {
-        _geminiError = 'الظل يصمت بوعيد... حاول إرسال رسالتك مرة أخرى.';
+        _geminiError = 'خطأ Gemini: $visibleError';
       });
     } finally {
       if (mounted) setState(() => _isSendingMessage = false);
