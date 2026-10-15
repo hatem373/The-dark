@@ -65,8 +65,9 @@ From the repository root, pass the key from the existing local environment
 file for an Android run:
 
 ```sh
-GEMINI_API_KEY="$(sed -n 's/^GEMINI_API_KEY=//p' './ShadowChat-project/- .env.' \
+GEMINI_API_KEY="$(sed -n 's/^GEMINI_API_KEY=//p' './- .env.' \
    | head -n 1 | tr -d '\r')"
+test -n "$GEMINI_API_KEY" || { printf '%s\n' 'GEMINI_API_KEY is missing'; exit 1; }
 flutter run --dart-define="GEMINI_API_KEY=$GEMINI_API_KEY"
 unset GEMINI_API_KEY
 ```
@@ -74,8 +75,9 @@ unset GEMINI_API_KEY
 Build a release APK for private testing with the same key:
 
 ```sh
-GEMINI_API_KEY="$(sed -n 's/^GEMINI_API_KEY=//p' './ShadowChat-project/- .env.' \
+GEMINI_API_KEY="$(sed -n 's/^GEMINI_API_KEY=//p' './- .env.' \
    | head -n 1 | tr -d '\r')"
+test -n "$GEMINI_API_KEY" || { printf '%s\n' 'GEMINI_API_KEY is missing'; exit 1; }
 flutter build apk --release --dart-define="GEMINI_API_KEY=$GEMINI_API_KEY"
 unset GEMINI_API_KEY
 ```
@@ -92,8 +94,9 @@ uses Firebase AI Logic.
 For Web, include the Firebase Web app values expected by `main.dart` as well:
 
 ```sh
-GEMINI_API_KEY="$(sed -n 's/^GEMINI_API_KEY=//p' './ShadowChat-project/- .env.' \
+GEMINI_API_KEY="$(sed -n 's/^GEMINI_API_KEY=//p' './- .env.' \
    | head -n 1 | tr -d '\r')"
+test -n "$GEMINI_API_KEY" || { printf '%s\n' 'GEMINI_API_KEY is missing'; exit 1; }
 flutter run -d chrome \
    --dart-define="GEMINI_API_KEY=$GEMINI_API_KEY" \
   --dart-define=FIREBASE_WEB_API_KEY=YOUR_FIREBASE_WEB_API_KEY \
