@@ -48,5 +48,11 @@ flutter:
     - assets/images/forest_entry.jpg
     - assets/images/IMG-20261006-WA7008.jpg
     - assets/videos/door_1080x1920.mp4
+    - assets/videos/day1/
+    - assets/videos/day1/posters/morning.jpg
+    - assets/videos/day1/posters/broken_branches.jpg
+    - assets/videos/day1/posters/storm_wind.jpg
+    - assets/audio/forest_birds.mp3
+    - assets/audio/day1/
     - assets/audio/wind_gust.mp3
     - assets/audio/whale_sound.mp3

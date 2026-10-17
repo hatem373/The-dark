@@ -9,10 +9,13 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'burning_card_with_real_fire.dart';
+import 'day1.dart';
+import 'day1_animations.dart';
 
 const _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
 enum _JourneyEnding { doom, victory }
+enum _DayOnePhase { morning, tension, fearSelected }
 
 class _ShadowChatMessage {
   const _ShadowChatMessage({required this.text, required this.isUser});
@@ -32,8 +35,11 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
     with TickerProviderStateMixin {
   int currentStage = 1;
   double userBraveryScore = 20.0;
+  _DayOnePhase _dayOnePhase = _DayOnePhase.morning;
   bool _doorOpened = false;
   bool _doorOpening = false;
+  bool _isDayOneAudioTransitioning = false;
+  Completer<void> _dayOneVideoEnd = Completer<void>();
   bool _didQueueDoorPrecache = false;
   bool _doorWindStarted = false;
   bool _isSendingMessage = false;
@@ -45,6 +51,7 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
   late final AnimationController _forestAnimationController;
   late final AnimationController _doorBurnController;
   final AudioPlayer _doorWindPlayer = AudioPlayer();
+  final DayOneAudioController _dayOneAudio = DayOneAudioController();
   late final VideoPlayerController _doorVideoController;
   late final Future<void> _doorVideoInitialization;
 
@@ -82,7 +89,12 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
   }
 
   Future<void> _precacheEntryImages() async {
-    for (final path in const ['assets/images/forest_entry.jpg']) {
+    for (final path in const [
+      'assets/images/forest_entry.jpg',
+      'assets/videos/day1/posters/morning.jpg',
+      'assets/videos/day1/posters/broken_branches.jpg',
+      'assets/videos/day1/posters/storm_wind.jpg',
+    ]) {
       if (!mounted) return;
       try {
         await precacheImage(
@@ -100,13 +112,15 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
     _forestAnimationController.dispose();
     _doorBurnController.dispose();
     unawaited(_doorWindPlayer.dispose());
+    unawaited(_dayOneAudio.dispose());
     unawaited(_doorVideoController.dispose());
     _messageController.dispose();
     _conversationScrollController.dispose();
     super.dispose();
   }
 
-  String _getStageImagePath() {
+  String? _getStageImagePath() {
+    if (currentStage == 1) return null;
     switch (currentStage) {
       case 1:
         return 'assets/images/forest_entry.jpg';
@@ -118,6 +132,18 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         return 'assets/images/forest_dawn.jpg';
       default:
         return 'assets/images/forest_safe_haven.jpg';
+    }
+  }
+
+  String? _getDayOneVideoPath() {
+    if (currentStage != 1) return null;
+    switch (_dayOnePhase) {
+      case _DayOnePhase.morning:
+        return 'assets/videos/day1/morning.mp4';
+      case _DayOnePhase.tension:
+        return 'assets/videos/day1/broken_branches.mp4';
+      case _DayOnePhase.fearSelected:
+        return 'assets/videos/day1/storm_wind.mp4';
     }
   }
 
@@ -134,6 +160,8 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         animation: _forestAnimationController,
         child: Image.asset(
           imagePath,
+          width: double.infinity,
+          height: double.infinity,
           fit: BoxFit.cover,
           cacheWidth: imageCacheWidth,
         ),
@@ -147,6 +175,31 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildCinematicForestBackground(String imagePath) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 1400),
+      switchInCurve: Curves.easeInOutCubic,
+      switchOutCurve: Curves.easeInOutCubic,
+      transitionBuilder: (child, animation) {
+        final easedAnimation = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeInOutCubic,
+        );
+        return FadeTransition(
+          opacity: easedAnimation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 1.045, end: 1).animate(easedAnimation),
+            child: child,
+          ),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey(imagePath),
+        child: _buildForestBackground(imagePath),
       ),
     );
   }
@@ -212,11 +265,99 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         if (_doorWindStarted) await _stopDoorWind();
         setState(() {
           _doorOpened = doorVideoPlayed;
-          if (doorVideoPlayed) currentStage = 1;
+          if (doorVideoPlayed) {
+            _dayOneVideoEnd = Completer<void>();
+            currentStage = 1;
+            _dayOnePhase = _DayOnePhase.morning;
+            _isDayOneAudioTransitioning = false;
+          }
           _doorOpening = false;
         });
+        if (doorVideoPlayed) unawaited(_playDayOneBirds());
       }
     }
+  }
+
+  Future<void> _playDayOneBirds() async {
+    await _dayOneAudio.playMorningBirds();
+    if (!mounted || !_doorOpened || currentStage != 1) return;
+    await _dayOneVideoEnd.future;
+    if (!mounted || !_doorOpened || currentStage != 1) return;
+
+    _dayOneVideoEnd = Completer<void>();
+    setState(() {
+      _dayOnePhase = _DayOnePhase.tension;
+      _isDayOneAudioTransitioning = true;
+    });
+    await Future.delayed(const Duration(milliseconds: 450));
+    await _triggerDayOneTension();
+  }
+
+  Future<void> _triggerDayOneTension() async {
+    try {
+      await _dayOneAudio.playTension(
+        canContinue: () =>
+            mounted &&
+            _doorOpened &&
+            currentStage == 1 &&
+            _dayOnePhase == _DayOnePhase.tension,
+      );
+          if (!mounted || !_doorOpened || currentStage != 1) return;
+          await _dayOneVideoEnd.future;
+          if (!mounted || !_doorOpened || currentStage != 1) return;
+
+          _dayOneVideoEnd = Completer<void>();
+          setState(() => _dayOnePhase = _DayOnePhase.fearSelected);
+          await Future.delayed(const Duration(milliseconds: 450));
+          if (!mounted || !_doorOpened || currentStage != 1) return;
+          await _playDayOneFearAudio(
+            canContinue: () =>
+            mounted &&
+            _doorOpened &&
+            currentStage == 1 &&
+            _dayOnePhase == _DayOnePhase.fearSelected,
+          );
+          if (!mounted || !_doorOpened || currentStage != 1) return;
+          await _dayOneVideoEnd.future;
+          if (!mounted || !_doorOpened || currentStage != 1) return;
+
+          setState(() => currentStage = 2);
+          await _continueDayOneAudioIntoDayTwo();
+    } finally {
+      if (mounted) {
+        setState(() => _isDayOneAudioTransitioning = false);
+      }
+    }
+  }
+
+  Future<void> _playDayOneFearAudio({required bool Function() canContinue}) async {
+    await _dayOneAudio.playFear(canContinue: canContinue);
+  }
+
+  void _selectEnding(_JourneyEnding ending) {
+    setState(() => _ending = ending);
+  }
+
+  Future<void> _continueDayOneAudioIntoDayTwo() async {
+    await _dayOneAudio.continueFearAudioIntoDayTwo();
+    if (mounted) {
+      setState(() => _isDayOneAudioTransitioning = false);
+    }
+  }
+
+  Future<void> _stopDayOneAudio() async {
+    if (!_dayOneVideoEnd.isCompleted) _dayOneVideoEnd.complete();
+    await _dayOneAudio.stop();
+  }
+
+  void _completeDayOneVideo() {
+    if (!_dayOneVideoEnd.isCompleted) _dayOneVideoEnd.complete();
+  }
+
+  void _advanceJourney() {
+    if (currentStage <= 1 || currentStage >= 4) return;
+    if (currentStage == 2) unawaited(_dayOneAudio.stopFearAudio());
+    setState(() => currentStage = (currentStage % 4) + 1);
   }
 
   Future<void> _playDoorWind() async {
@@ -248,10 +389,6 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
   Future<void> _initializeDoorVideo() async {
     try {
       await _doorVideoController.initialize();
-      await Future.wait([
-        _doorVideoController.setLooping(false),
-        _doorVideoController.seekTo(Duration.zero),
-      ]);
       if (mounted) setState(() {});
     } catch (error) {
       debugPrint('Door video initialization failed: $error');
@@ -278,10 +415,13 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
 
     _doorVideoController.addListener(completePlayback);
     try {
-      await Future.wait([
-        _doorVideoController.setLooping(false),
-        _doorVideoController.seekTo(Duration.zero),
-      ]);
+      await _doorVideoController.setLooping(false);
+      final videoDuration = _doorVideoController.value.duration;
+      if (_doorVideoController.value.isCompleted ||
+          (videoDuration > Duration.zero &&
+              _doorVideoController.value.position >= videoDuration)) {
+        await _doorVideoController.seekTo(Duration.zero);
+      }
       await _doorVideoController.play();
       unawaited(_playDoorWind());
       completePlayback();
@@ -769,7 +909,14 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
                     children: [
                       IconButton(
                         tooltip: 'العودة إلى الباب',
-                        onPressed: () => setState(() => _doorOpened = false),
+                        onPressed: () {
+                          unawaited(_stopDayOneAudio());
+                          setState(() {
+                            _doorOpened = false;
+                            _dayOnePhase = _DayOnePhase.morning;
+                            _isDayOneAudioTransitioning = false;
+                          });
+                        },
                         icon: const Icon(
                           Icons.arrow_back,
                           color: Colors.white70,
@@ -822,6 +969,17 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
                         ],
                       ),
                       const Spacer(),
+                      if (currentStage > 1 && currentStage < 4)
+                        IconButton(
+                          tooltip: 'اليوم التالي',
+                          onPressed: _isDayOneAudioTransitioning
+                              ? null
+                              : _advanceJourney,
+                          icon: const Icon(
+                            Icons.skip_next_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
                       const Padding(
                         padding: EdgeInsetsDirectional.only(end: 16),
                         child: Icon(
@@ -842,7 +1000,26 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
         children: [
-          Positioned.fill(child: _buildForestBackground(_getStageImagePath())),
+          Positioned.fill(
+            child: DayOneAnimationOverlay(
+              imagePath: _getStageImagePath(),
+              videoPath: _getDayOneVideoPath(),
+              onVideoComplete:
+                  currentStage == 1 ? _completeDayOneVideo : null,
+              walkingActive: _doorOpened &&
+                  currentStage == 1 &&
+                  _dayOnePhase == _DayOnePhase.morning,
+              heartbeatActive: currentStage == 1 &&
+                  _dayOnePhase == _DayOnePhase.tension,
+              windActive: currentStage == 1 &&
+                  _dayOnePhase == _DayOnePhase.fearSelected,
+                onShadowAppear:
+                  currentStage == 1 &&
+                    _dayOnePhase == _DayOnePhase.fearSelected
+                  ? _dayOneAudio.shadowAppeared
+                  : null,
+            ),
+          ),
           Container(color: _getOverlayColor()),
           SafeArea(
             child: Column(
@@ -1023,27 +1200,13 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
                             size: 20,
                           ),
                         ),
-                        if (currentStage < 4)
-                          IconButton(
-                            key: const ValueKey('next-day'),
-                            onPressed: () {
-                              setState(() {
-                                currentStage = (currentStage % 4) + 1;
-                              });
-                            },
-                            icon: const Icon(
-                              Icons.skip_next_rounded,
-                              color: Colors.white,
-                            ),
-                          ),
                         if (currentStage >= 4)
                           Row(
                             children: [
                               TextButton(
                                 key: const ValueKey('ending-victory'),
-                                onPressed: () => setState(
-                                  () => _ending = _JourneyEnding.victory,
-                                ),
+                                onPressed: () =>
+                                    _selectEnding(_JourneyEnding.victory),
                                 child: const Text(
                                   'انتصار',
                                   style: TextStyle(color: Colors.amberAccent),
@@ -1051,9 +1214,8 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
                               ),
                               TextButton(
                                 key: const ValueKey('ending-doom'),
-                                onPressed: () => setState(
-                                  () => _ending = _JourneyEnding.doom,
-                                ),
+                                onPressed: () =>
+                                    _selectEnding(_JourneyEnding.doom),
                                 child: const Text(
                                   'هلاك',
                                   style: TextStyle(color: Colors.redAccent),
@@ -1084,7 +1246,7 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Positioned.fill(child: _buildForestBackground(imagePath)),
+          Positioned.fill(child: _buildCinematicForestBackground(imagePath)),
           ColoredBox(color: Colors.black.withOpacity(isVictory ? 0.42 : 0.64)),
           Center(
             child: SingleChildScrollView(
