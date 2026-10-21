@@ -41,7 +41,6 @@ flutter:
   assets:
     - assets/images/whale.jpg
     - assets/images/forest_safe_haven.jpg
-    - assets/images/forest_fog.jpg
     - assets/images/forest_glowing_eyes.jpg
     - assets/images/forest_dawn.jpg
     - assets/images/shadow_avatar.jpg
@@ -52,6 +51,9 @@ flutter:
     - assets/videos/day1/posters/morning.jpg
     - assets/videos/day1/posters/broken_branches.jpg
     - assets/videos/day1/posters/storm_wind.jpg
+    - assets/videos/day2/day2.mp4
+    - assets/videos/day3/gemini_generated_video_1bfc8175.mp4
+    - assets/videos/day3/gemini_generated_video_a27bddc9.mp4
     - assets/audio/forest_birds.mp3
     - assets/audio/day1/
     - assets/audio/wind_gust.mp3

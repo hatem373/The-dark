@@ -68,6 +68,7 @@ class DayOneAudioController {
       ).catchError((Object error) {
         debugPrint('Day one wind playback failed: $error');
       });
+      unawaited(windPlayback);
 
       await _effectPlayer.setPlaybackRate(1);
       await _effectPlayer.setBalance(0);
@@ -106,8 +107,6 @@ class DayOneAudioController {
         playbackRate: 0.88,
         balance: 0.12,
       );
-      if (!canContinue()) return;
-      await windPlayback;
       if (!canContinue()) return;
 
       await _effectPlayer.setReleaseMode(ReleaseMode.loop);

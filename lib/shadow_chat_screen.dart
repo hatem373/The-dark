@@ -11,6 +11,8 @@ import 'package:video_player/video_player.dart';
 import 'burning_card_with_real_fire.dart';
 import 'day1.dart';
 import 'day1_animations.dart';
+import 'day2.dart';
+import 'day3.dart';
 
 const _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
@@ -34,12 +36,16 @@ class ShadowChatScreen extends StatefulWidget {
 class _ShadowChatScreenState extends State<ShadowChatScreen>
     with TickerProviderStateMixin {
   int currentStage = 1;
+  int _dayTwoPhase = 1;
+  int _dayThreePhase = 1;
   double userBraveryScore = 20.0;
   _DayOnePhase _dayOnePhase = _DayOnePhase.morning;
   bool _doorOpened = false;
   bool _doorOpening = false;
   bool _isDayOneAudioTransitioning = false;
-  Completer<void> _dayOneVideoEnd = Completer<void>();
+  bool _isDayTwoVideoPaused = false;
+  bool _isDayThreeVideoPaused = false;
+  bool _isDayOneVideoPaused = false;
   bool _didQueueDoorPrecache = false;
   bool _doorWindStarted = false;
   bool _isSendingMessage = false;
@@ -120,18 +126,23 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
   }
 
   String? _getStageImagePath() {
-    if (currentStage == 1) return null;
+    if (currentStage <= 2) return null;
     switch (currentStage) {
-      case 1:
-        return 'assets/images/forest_entry.jpg';
-      case 2:
-        return 'assets/images/forest_fog.jpg';
-      case 3:
-        return 'assets/images/forest_glowing_eyes.jpg';
       case 4:
         return 'assets/images/forest_dawn.jpg';
       default:
         return 'assets/images/forest_safe_haven.jpg';
+    }
+  }
+
+  String _getDayThreeVideoPath() {
+    switch (_dayThreePhase) {
+      case 1:
+        return 'assets/videos/door_1080x1920.mp4';
+      case 2:
+        return 'assets/videos/day3/gemini_generated_video_1bfc8175.mp4';
+      default:
+        return 'assets/videos/day3/gemini_generated_video_a27bddc9.mp4';
     }
   }
 
@@ -209,7 +220,7 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
       case 1:
         return Colors.black.withOpacity(0.24);
       case 2:
-        return Colors.indigo.withOpacity(0.3);
+        return Colors.transparent;
       case 3:
         return Colors.black.withOpacity(0.62);
       case 4:
@@ -266,31 +277,20 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         setState(() {
           _doorOpened = doorVideoPlayed;
           if (doorVideoPlayed) {
-            _dayOneVideoEnd = Completer<void>();
             currentStage = 1;
             _dayOnePhase = _DayOnePhase.morning;
+            _isDayOneVideoPaused = false;
             _isDayOneAudioTransitioning = false;
           }
           _doorOpening = false;
         });
-        if (doorVideoPlayed) unawaited(_playDayOneBirds());
+        if (doorVideoPlayed) _playDayOneBirds();
       }
     }
   }
 
-  Future<void> _playDayOneBirds() async {
-    await _dayOneAudio.playMorningBirds();
-    if (!mounted || !_doorOpened || currentStage != 1) return;
-    await _dayOneVideoEnd.future;
-    if (!mounted || !_doorOpened || currentStage != 1) return;
-
-    _dayOneVideoEnd = Completer<void>();
-    setState(() {
-      _dayOnePhase = _DayOnePhase.tension;
-      _isDayOneAudioTransitioning = true;
-    });
-    await Future.delayed(const Duration(milliseconds: 450));
-    await _triggerDayOneTension();
+  void _playDayOneBirds() {
+    unawaited(_dayOneAudio.playMorningBirds());
   }
 
   Future<void> _triggerDayOneTension() async {
@@ -302,27 +302,6 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
             currentStage == 1 &&
             _dayOnePhase == _DayOnePhase.tension,
       );
-          if (!mounted || !_doorOpened || currentStage != 1) return;
-          await _dayOneVideoEnd.future;
-          if (!mounted || !_doorOpened || currentStage != 1) return;
-
-          _dayOneVideoEnd = Completer<void>();
-          setState(() => _dayOnePhase = _DayOnePhase.fearSelected);
-          await Future.delayed(const Duration(milliseconds: 450));
-          if (!mounted || !_doorOpened || currentStage != 1) return;
-          await _playDayOneFearAudio(
-            canContinue: () =>
-            mounted &&
-            _doorOpened &&
-            currentStage == 1 &&
-            _dayOnePhase == _DayOnePhase.fearSelected,
-          );
-          if (!mounted || !_doorOpened || currentStage != 1) return;
-          await _dayOneVideoEnd.future;
-          if (!mounted || !_doorOpened || currentStage != 1) return;
-
-          setState(() => currentStage = 2);
-          await _continueDayOneAudioIntoDayTwo();
     } finally {
       if (mounted) {
         setState(() => _isDayOneAudioTransitioning = false);
@@ -331,7 +310,13 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
   }
 
   Future<void> _playDayOneFearAudio({required bool Function() canContinue}) async {
-    await _dayOneAudio.playFear(canContinue: canContinue);
+    try {
+      await _dayOneAudio.playFear(canContinue: canContinue);
+    } finally {
+      if (mounted) {
+        setState(() => _isDayOneAudioTransitioning = false);
+      }
+    }
   }
 
   void _selectEnding(_JourneyEnding ending) {
@@ -346,18 +331,101 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
   }
 
   Future<void> _stopDayOneAudio() async {
-    if (!_dayOneVideoEnd.isCompleted) _dayOneVideoEnd.complete();
     await _dayOneAudio.stop();
   }
 
   void _completeDayOneVideo() {
-    if (!_dayOneVideoEnd.isCompleted) _dayOneVideoEnd.complete();
+    if (mounted && currentStage == 1 && !_isDayOneVideoPaused) {
+      setState(() => _isDayOneVideoPaused = true);
+    }
   }
 
   void _advanceJourney() {
+    if (currentStage == 1) {
+      if (!_isDayOneVideoPaused || _isDayOneAudioTransitioning) return;
+
+      switch (_dayOnePhase) {
+        case _DayOnePhase.morning:
+          setState(() {
+            _dayOnePhase = _DayOnePhase.tension;
+            _isDayOneVideoPaused = false;
+            _isDayOneAudioTransitioning = true;
+          });
+          unawaited(_triggerDayOneTension());
+          return;
+        case _DayOnePhase.tension:
+          setState(() {
+            _dayOnePhase = _DayOnePhase.fearSelected;
+            _isDayOneVideoPaused = false;
+            _isDayOneAudioTransitioning = true;
+          });
+          unawaited(
+            _playDayOneFearAudio(
+              canContinue: () =>
+            mounted &&
+            _doorOpened &&
+            currentStage == 1 &&
+            _dayOnePhase == _DayOnePhase.fearSelected,
+            ),
+          );
+          return;
+        case _DayOnePhase.fearSelected:
+          setState(() {
+            currentStage = 2;
+            _dayTwoPhase = 1;
+            _isDayTwoVideoPaused = false;
+            _isDayOneVideoPaused = false;
+            _isDayOneAudioTransitioning = true;
+          });
+          unawaited(_continueDayOneAudioIntoDayTwo());
+          return;
+      }
+    }
     if (currentStage <= 1 || currentStage >= 4) return;
-    if (currentStage == 2) unawaited(_dayOneAudio.stopFearAudio());
+    if (currentStage == 2) {
+      if (!_isDayTwoVideoPaused) return;
+      if (_dayTwoPhase < 3) {
+        setState(() {
+          _dayTwoPhase++;
+          _isDayTwoVideoPaused = false;
+        });
+      } else {
+        unawaited(_dayOneAudio.stopFearAudio());
+        setState(() {
+          currentStage = 3;
+          _dayThreePhase = 1;
+          _isDayThreeVideoPaused = false;
+        });
+      }
+      return;
+    }
+    if (currentStage == 3) {
+      if (!_isDayThreeVideoPaused) return;
+      if (_dayThreePhase < 3) {
+        setState(() {
+          _dayThreePhase++;
+          _isDayThreeVideoPaused = false;
+        });
+      } else {
+        setState(() => currentStage = 4);
+      }
+      return;
+    }
     setState(() => currentStage = (currentStage % 4) + 1);
+  }
+
+  void _onDayTwoCheckpoint() {
+    unawaited(_dayOneAudio.stopFearAudio());
+    if (mounted) setState(() => _isDayTwoVideoPaused = true);
+  }
+
+  void _onDayThreeVideoComplete() {
+    if (mounted) setState(() => _isDayThreeVideoPaused = true);
+  }
+
+  void _onDayTwoVideoComplete() {
+    unawaited(_dayOneAudio.stopFearAudio());
+    if (mounted) setState(() => _isDayTwoVideoPaused = true);
   }
 
   Future<void> _playDoorWind() async {
@@ -914,6 +982,7 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
                           setState(() {
                             _doorOpened = false;
                             _dayOnePhase = _DayOnePhase.morning;
+                            _isDayOneVideoPaused = false;
                             _isDayOneAudioTransitioning = false;
                           });
                         },
@@ -969,10 +1038,23 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
                         ],
                       ),
                       const Spacer(),
-                      if (currentStage > 1 && currentStage < 4)
+                        if ((currentStage == 1 && _isDayOneVideoPaused) ||
+                          (currentStage > 1 && currentStage < 4))
                         IconButton(
-                          tooltip: 'اليوم التالي',
-                          onPressed: _isDayOneAudioTransitioning
+                          tooltip: currentStage == 1
+                            ? 'الفيديو التالي'
+                            : currentStage == 2 && _dayTwoPhase < 3
+                              ? 'استكمال فيديو اليوم الثاني'
+                              : currentStage == 3 && _dayThreePhase < 3
+                                ? 'الفيديو التالي'
+                              : 'اليوم التالي',
+                          onPressed: _isDayOneAudioTransitioning ||
+                              (currentStage == 1 &&
+                                !_isDayOneVideoPaused) ||
+                                  (currentStage == 2 &&
+                                      !_isDayTwoVideoPaused) ||
+                                    (currentStage == 3 &&
+                                      !_isDayThreeVideoPaused)
                               ? null
                               : _advanceJourney,
                           icon: const Icon(
@@ -1001,24 +1083,36 @@ class _ShadowChatScreenState extends State<ShadowChatScreen>
         clipBehavior: Clip.hardEdge,
         children: [
           Positioned.fill(
-            child: DayOneAnimationOverlay(
-              imagePath: _getStageImagePath(),
-              videoPath: _getDayOneVideoPath(),
-              onVideoComplete:
+            child: currentStage == 2
+              ? DayTwoVideoBackground(
+                videoPath: 'assets/videos/day2/day2.mp4',
+                phase: _dayTwoPhase,
+                onCheckpoint: _onDayTwoCheckpoint,
+                onComplete: _onDayTwoVideoComplete,
+                )
+              : currentStage == 3
+                ? DayThreeVideoBackground(
+                    key: ValueKey(_dayThreePhase),
+                    videoPath: _getDayThreeVideoPath(),
+                    onComplete: _onDayThreeVideoComplete,
+                  )
+              : DayOneAnimationOverlay(
+                imagePath: _getStageImagePath(),
+                videoPath: _getDayOneVideoPath(),
+                onVideoComplete:
                   currentStage == 1 ? _completeDayOneVideo : null,
-              walkingActive: _doorOpened &&
+                walkingActive: _doorOpened &&
                   currentStage == 1 &&
                   _dayOnePhase == _DayOnePhase.morning,
-              heartbeatActive: currentStage == 1 &&
+                heartbeatActive: currentStage == 1 &&
                   _dayOnePhase == _DayOnePhase.tension,
-              windActive: currentStage == 1 &&
+                windActive: currentStage == 1 &&
                   _dayOnePhase == _DayOnePhase.fearSelected,
-                onShadowAppear:
-                  currentStage == 1 &&
+                onShadowAppear: currentStage == 1 &&
                     _dayOnePhase == _DayOnePhase.fearSelected
                   ? _dayOneAudio.shadowAppeared
                   : null,
-            ),
+                ),
           ),
           Container(color: _getOverlayColor()),
           SafeArea(

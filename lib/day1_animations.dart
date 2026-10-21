@@ -395,7 +395,6 @@ class _DayOneVideoBackgroundState extends State<_DayOneVideoBackground> {
   bool _failed = false;
   bool _didSignalShadow = false;
   bool _didSignalVideoComplete = false;
-  Timer? _endHoldTimer;
 
   @override
   void initState() {
@@ -420,9 +419,7 @@ class _DayOneVideoBackgroundState extends State<_DayOneVideoBackground> {
   void _holdFinalFrame() {
     if (_didSignalVideoComplete) return;
     _didSignalVideoComplete = true;
-    _endHoldTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) widget.onVideoComplete?.call();
-    });
+    widget.onVideoComplete?.call();
   }
 
   Future<void> _initializeVideo() async {
@@ -447,7 +444,6 @@ class _DayOneVideoBackgroundState extends State<_DayOneVideoBackground> {
 
   @override
   void dispose() {
-    _endHoldTimer?.cancel();
     _controller.removeListener(_checkShadowAppearance);
     unawaited(_controller.dispose());
     super.dispose();
